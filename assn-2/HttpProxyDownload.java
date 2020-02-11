@@ -1,6 +1,5 @@
 import java.net.*;
 import java.io.*;
-import java.util.ArrayList;
 import java.util.regex.*;
 
 class ProxyAuthenticator extends Authenticator{
@@ -43,13 +42,12 @@ class HttpProxyDownload {
             System.out.println("Enter correct URL");
             e.printStackTrace();
         }
-
     }
 
-    public static void main(final String args[]) {
+    public static void main(String args[]) {
         HttpProxyDownload obj = new HttpProxyDownload(args);
         HttpURLConnection url_connector;
-        try{
+        try {
             url_connector = (HttpURLConnection) obj.url.openConnection();
             setSystemProperties(obj.username, obj.password, obj.host_addr, obj.host_port);
             url_connector.setRequestMethod("GET");
@@ -58,8 +56,7 @@ class HttpProxyDownload {
             String responseText = getHTML(response);
 
             save_html(responseText, obj.html_save_path);
-            ArrayList<String> imgURL = extractImage(responseText);
-            save_image(obj.url, imgURL, obj.img_save_path);
+            extractAndSaveImage(obj.url, responseText, obj.img_save_path);
     
         } catch (ProtocolException e) {
             e.printStackTrace();
@@ -68,40 +65,45 @@ class HttpProxyDownload {
         }
     }
 
-    public static void save_image(URL absURL, ArrayList<String> imgURL, String path) throws IOException{
-        if (imgURL.size() == 0) {
-            System.out.println("Now images found !");
-        }
-        else{
-            for (String img: imgURL){
-                String[] imgTags = img.split(" ");
-                String srcVal = null;
-                for (String attr: imgTags){
-                    if (attr.length() < 3) continue;
-                    else if (attr.substring(0, 3).equals("src") == true){
-                        srcVal = attr.substring(5, attr.length() - 1);
-                        break;
-                    }
-                }
-                if (srcVal == null){
-                    System.out.println("Src Tag not found !");
-                }
-                else {
-                    URL srcUrl = new URL(absURL, srcVal);
-                    InputStream in = srcUrl.openStream();
-                    OutputStream out = new FileOutputStream(path);
+    public static boolean save_image(URL absURL, String imgURL, String path) throws IOException{
+        String[] imgTags = imgURL.split(" ");
+        String srcVal = null;
 
-                    byte[] b = new byte[2048];
-                    int length;
-                
-                    while ((length = in.read(b)) != -1) {
-                        out.write(b, 0, length);
-                    }
-                
-                    in.close();
-                    out.close();
-                }
+        for (String attr: imgTags){
+            if (attr.length() < 3) continue;
+            else if (attr.substring(0, 3).equals("src") == true){
+                srcVal = attr.substring(5, attr.length() - 1);
+                break;
             }
+        }
+        if (srcVal == null){
+            return false;
+        }
+        else {
+            URL srcUrl = new URL(absURL, srcVal);
+            InputStream in = srcUrl.openStream();
+            OutputStream out = new FileOutputStream(path);
+
+            byte[] b = new byte[2048];
+            int length;
+
+            while ((length = in.read(b)) != -1) {
+                out.write(b, 0, length);
+            }
+
+            in.close();
+            out.close();
+            return true;
+        }
+    }
+
+    public static void extractAndSaveImage(URL absURL, String htmlCode, String path) throws IOException{
+        Pattern img_tag = Pattern.compile("<img (.*?)>");
+        Matcher matcher = img_tag.matcher(htmlCode);
+
+        while (matcher.find()){
+            boolean status = save_image(absURL, matcher.group(0), path);
+            if (!status) return;
         }
     }
 
@@ -115,22 +117,10 @@ class HttpProxyDownload {
         return respString;
     }
 
-    public static ArrayList<String> extractImage(String htmlCode) throws IOException{
-        Pattern img_tag = Pattern.compile("<img (.*?)>");
-        Matcher matcher = img_tag.matcher(htmlCode);
-
-        ArrayList<String> listImages = new ArrayList<String>();
-        while (matcher.find()){
-            listImages.add(matcher.group(0));
-        }
-        return listImages;
-    }
-
     public static void save_html(String writeString, String path) throws IOException{
         FileWriter file = new FileWriter(path);
         file.write(writeString);
         file.close();
-
     }
 
     public static void setSystemProperties(String username, String password, String host, String port) {

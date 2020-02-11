@@ -1,2 +1,4 @@
 db_file
+*.class
+*.html
 

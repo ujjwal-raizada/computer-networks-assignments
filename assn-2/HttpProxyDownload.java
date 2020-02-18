@@ -1,131 +1,69 @@
-import java.net.*;
 import java.io.*;
-import java.util.regex.*;
+import java.net.*;
+import java.util.Base64;
 
-class ProxyAuthenticator extends Authenticator{
-    String username, password;
+class ClientRequest {
 
-    public ProxyAuthenticator(String username, String password){
-        this.username = username;
-        this.password = password;
+    String html_path;
+    String img_path;
+    Socket socket;
+
+    public ClientRequest(String proxyUrl, int proxyPort, String url, String username, 
+                         String password, String html_path, String img_path) {
+        createSocket(proxyUrl, proxyPort);
+        connectURL(url, username, password);
+        this.html_path = html_path;
+        this.img_path = img_path;
     }
 
-    public PasswordAuthentication authenticate(){
-        return new PasswordAuthentication(username, password.toCharArray());
+    public void createSocket(String proxyUrl, int proxyPort) {
+        try {
+            socket = new Socket(proxyUrl, proxyPort);
+            System.out.println("Connection Established");
+        } catch (UnknownHostException e){
+            e.printStackTrace(); 
+            System.exit(1);
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+
+    public void connectURL(String url, String user, String pass){
+        try{
+            PrintWriter toProxy = new PrintWriter(socket.getOutputStream());
+            String urlPlusPass = new String(Base64.getEncoder().encode(new String(user + ":" + pass).getBytes()));
+
+            toProxy.print("CONNECT " + url + " HTTP/1.1\r\n");
+            toProxy.print("Proxy-Authorization: Basic " + urlPlusPass + "\r\n");
+            toProxy.print("\r\n");
+            toProxy.flush();
+            
+            BufferedReader buf = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String response = buf.readLine();
+            System.out.println("Response : " + response);
+            if (!response.contains("200")) {;
+                System.out.println("Couldn't Establish Connection");
+                System.exit(0);
+            }
+        } catch (IOException e){
+            e.printStackTrace();
+        } 
     }
 }
 
 
-class HttpProxyDownload {
-
-    URL url;
-    String host_addr;
-    String host_port;
-    private String username;
-    private String password;
-    String html_save_path;
-    String img_save_path;
-
-    public HttpProxyDownload(final String args[]) {
-        try {
-            url = new URL(args[0]);
-            host_addr = args[1];
-            host_port = args[2];
-            username = args[3];
-            password = args[4];
-            html_save_path = args[5];
-            img_save_path = args[6];
-        } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("Enter all the parameters");
-            e.printStackTrace();
-        } catch (MalformedURLException e) {
-            System.out.println("Enter correct URL");
-            e.printStackTrace();
-        }
-    }
-
-    public static void main(String args[]) {
-        HttpProxyDownload obj = new HttpProxyDownload(args);
-        HttpURLConnection url_connector;
-        try {
-            url_connector = (HttpURLConnection) obj.url.openConnection();
-            setSystemProperties(obj.username, obj.password, obj.host_addr, obj.host_port);
-            url_connector.setRequestMethod("GET");
-
-            InputStream response = url_connector.getInputStream();
-            String responseText = getHTML(response);
-
-            save_html(responseText, obj.html_save_path);
-            extractAndSaveImage(obj.url, responseText, obj.img_save_path);
+class HttpProxyDownload{
     
-        } catch (ProtocolException e) {
-            e.printStackTrace();
-        } catch (IOException e){
-            e.printStackTrace();
+    public static void main(String args[]){
+        if (args.length != 7) {
+            System.out.format("Expected 7, found %s args\n", args.length);
+            return;
         }
+        ClientRequest client = new ClientRequest(args[1], Integer.parseInt(args[2]), args[0], 
+                                                 args[3], args[4], args[5], args[6]);
+    
+        
     }
 
-    public static boolean save_image(URL absURL, String imgURL, String path) throws IOException{
-        String[] imgTags = imgURL.split(" ");
-        String srcVal = null;
-
-        for (String attr: imgTags){
-            if (attr.length() < 3) continue;
-            else if (attr.substring(0, 3).equals("src") == true){
-                srcVal = attr.substring(5, attr.length() - 1);
-                break;
-            }
-        }
-        if (srcVal == null){
-            return false;
-        }
-        else {
-            URL srcUrl = new URL(absURL, srcVal);
-            InputStream in = srcUrl.openStream();
-            OutputStream out = new FileOutputStream(path);
-
-            byte[] b = new byte[2048];
-            int length;
-
-            while ((length = in.read(b)) != -1) {
-                out.write(b, 0, length);
-            }
-
-            in.close();
-            out.close();
-            return true;
-        }
-    }
-
-    public static void extractAndSaveImage(URL absURL, String htmlCode, String path) throws IOException{
-        Pattern img_tag = Pattern.compile("<img (.*?)>");
-        Matcher matcher = img_tag.matcher(htmlCode);
-
-        while (matcher.find()){
-            boolean status = save_image(absURL, matcher.group(0), path);
-            if (!status) return;
-        }
-    }
-
-    public static String getHTML(InputStream response) throws IOException{
-        BufferedReader respReader = new BufferedReader(new InputStreamReader(response));
-        String respString = "";
-        String temp; 
-        while ((temp = respReader.readLine()) != null){
-            respString += temp;
-        }
-        return respString;
-    }
-
-    public static void save_html(String writeString, String path) throws IOException{
-        FileWriter file = new FileWriter(path);
-        file.write(writeString);
-        file.close();
-    }
-
-    public static void setSystemProperties(String username, String password, String host, String port) {
-        System.setProperty("https.proxyHost", host);
-        System.setProperty("https.proxyPort", port);
-        Authenticator.setDefault(new ProxyAuthenticator(username, password));
-    }
 }

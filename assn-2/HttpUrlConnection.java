@@ -57,7 +57,7 @@ class HttpProxyDownload {
 
             save_html(responseText, obj.html_save_path);
             extractAndSaveImage(obj.url, responseText, obj.img_save_path);
-    
+
         } catch (ProtocolException e) {
             e.printStackTrace();
         } catch (IOException e){
@@ -102,6 +102,7 @@ class HttpProxyDownload {
         Matcher matcher = img_tag.matcher(htmlCode);
 
         while (matcher.find()){
+            System.out.println(matcher);
             boolean status = save_image(absURL, matcher.group(0), path);
             if (!status) return;
         }
@@ -110,7 +111,7 @@ class HttpProxyDownload {
     public static String getHTML(InputStream response) throws IOException{
         BufferedReader respReader = new BufferedReader(new InputStreamReader(response));
         String respString = "";
-        String temp; 
+        String temp;
         while ((temp = respReader.readLine()) != null){
             respString += temp;
         }

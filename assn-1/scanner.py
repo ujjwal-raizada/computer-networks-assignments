@@ -12,14 +12,12 @@ print("Enter scanner config (leave empty for default values):\n")
 host = input("Enter host IP address: ")
 block_size = input("Enter CIDR block size: ")
 args = input("Enter nmap arguments: ")
-timer = input("input time between consecutive scans (in secs): ")
 
 # default values
 # default IP is ip address of my system 
 if (host == ''): host = '172.16.38.63'
 if (block_size == ''): block_size = '24'
 if (args == ''): args = '-n -sP'
-if (timer == ''): timer = '600'
 
 hosts = host + '/' + block_size
 
@@ -62,6 +60,6 @@ while True:
 	write_to_csv(scan_details)
 
 	print("Scan#{} => time: {}, number of hosts: {}".format(scan_counter, scan_time, number_of_hosts))
-	time.sleep(int(timer))
+	time.sleep(600)
 
 

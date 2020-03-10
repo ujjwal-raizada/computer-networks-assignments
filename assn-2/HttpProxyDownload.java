@@ -1,6 +1,9 @@
 import java.io.*;
 import java.net.*;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -14,8 +17,8 @@ class ClientRequest {
     private String username;
     private String password;
 
-    public ClientRequest(String proxyIP, int port, String hostURL, String user, 
-                         String pass, String html_path, String img_path){    
+    public ClientRequest(String proxyIP, int port, String hostURL, String user,
+                         String pass, String html_path, String img_path){
         proxyPort = port;
         proxyUrl = proxyIP;
         username = user;
@@ -26,14 +29,15 @@ class ClientRequest {
 
         createSocket();
         connectURL(hostURL);
-        sslToServer(hostURL);
+        String htmlCode = extractHTML(hostURL);
+        extractAndSaveImage(hostURL, htmlCode);
     }
 
     void createSocket() {
         try {
             socket = new Socket(proxyUrl, proxyPort);
         } catch (UnknownHostException e){
-            e.printStackTrace(); 
+            e.printStackTrace();
             System.exit(1);
         } catch (IOException e) {
             e.printStackTrace();
@@ -48,24 +52,25 @@ class ClientRequest {
 
             String urlPlusPass = new String(Base64.getEncoder().encode(new String(username + ":" + password).getBytes()));
 
-            toProxy.print("CONNECT " + hostURL + " HTTP/1.1\r\n");
+            toProxy.print("CONNECT " + hostURL + " HTTP/1.0\r\n");
             toProxy.print("Proxy-Authorization: Basic " + urlPlusPass + "\r\n");
             toProxy.print("\r\n");
             toProxy.flush();
-            
+
             String response = fromProxy.readLine();
             System.out.println("Proxy Connection : " + response);
-    
+
             if (!response.contains("200")) {
                 System.out.println("Couldn't Establish Connection");
             }
         } catch (IOException e){
             e.printStackTrace();
             System.exit(1);
-        } 
+        }
     }
 
-    public void sslToServer (String hostURL){
+    public String extractHTML (String hostURL){
+        String htmlCode = "";
         try{
             SSLSocketFactory factorySocket = (SSLSocketFactory) SSLSocketFactory.getDefault();
             SSLSocket sslServer = (SSLSocket) factorySocket.createSocket(socket, hostURL, proxyPort, true);
@@ -77,8 +82,9 @@ class ClientRequest {
                                     new OutputStreamWriter(
                                         sslServer.getOutputStream()
                                     )));
-                                        
+
             toRemote.print("GET / HTTP/1.0\r\n");
+            toRemote.print("Host: " + hostURL + "\r\n");
             toRemote.print("\r\n");
             toRemote.flush();
 
@@ -92,20 +98,78 @@ class ClientRequest {
 
             String response = "";
             boolean payloadAppeared = false;
-            String htmlCode = "";
             while ((response = fromRemote.readLine()) != null) {
                 if (payloadAppeared) htmlCode += response;
                 if (response.length() == 0) payloadAppeared = true;
-
             }
             save_html(htmlCode);
-            toRemote.close();
-            fromRemote.close();
-            sslServer.close();
-            socket.close();
         } catch (IOException e){
             e.printStackTrace();
             System.exit(1);
+        }
+        return htmlCode;
+    }
+
+    public void extractAndSaveImage(String hostURL, String htmlCode){
+        Pattern img_tag = Pattern.compile("<img[^>]*src=[\"']([^\"^']*)", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = img_tag.matcher(htmlCode);
+
+        while (matcher.find()){
+            boolean status = save_image(hostURL, matcher.group(1));
+            if (status) return;
+        }
+    }
+
+    public boolean save_image(String hostURL, String imgURL){
+        if (imgURL.substring(0,5).equals("https") == false) imgURL = "/" + imgURL;
+        try{
+            createSocket();
+            connectURL(hostURL);
+            SSLSocketFactory factorySocket = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            SSLSocket sslServer = (SSLSocket) factorySocket.createSocket(socket, hostURL, proxyPort, true);
+            System.out.println("Server Connection: SSL Connection established");
+
+            sslServer.startHandshake();
+            PrintWriter toRemote = new PrintWriter(
+                                    new BufferedWriter(
+                                    new OutputStreamWriter(
+                                        sslServer.getOutputStream()
+                                    )));
+
+            toRemote.print("GET "+ imgURL +" HTTP/1.0\r\n");
+            toRemote.print("Host: " + hostURL + "\r\n");
+            toRemote.print("\r\n");
+            toRemote.flush();
+
+            OutputStream dos = new BufferedOutputStream(new FileOutputStream(img_path));
+            InputStream in = sslServer.getInputStream();
+            int count, offset;
+            byte[] buffer = new byte[2048];
+            boolean eohFound = false;
+
+
+            while ((count = in.read(buffer)) != -1){
+                offset = 0;
+                if(!eohFound){
+                    String string = new String(buffer, 0, count);
+                    int indexOfEOH = string.indexOf("\r\n\r\n");
+                    if(indexOfEOH != -1) {
+                        count = count-indexOfEOH-4;
+                        offset = indexOfEOH+4;
+                        eohFound = true;
+                    } else {
+                        count = 0;
+                    }
+                }
+                dos.write(buffer, offset, count);
+                dos.flush();
+            }
+            in.close();
+            dos.close();
+            return true;
+        } catch (IOException e){
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -119,16 +183,16 @@ class ClientRequest {
 
 
 class HttpProxyDownload{
-    
+
     public static void main(String args[]){
         if (args.length != 7) {
             System.out.format("Expected 7, found %s args\n", args.length);
             return;
         }
-        ClientRequest client = new ClientRequest(args[1], Integer.parseInt(args[2]), 
+        ClientRequest client = new ClientRequest(args[1], Integer.parseInt(args[2]),
                                                     args[0], args[3], args[4], args[5], args[6]);
 
-        
+
     }
 
 }

@@ -1,3 +1,10 @@
+/* BeginGroupMembers */
+/* f20170124@hyderabad.bits-pilani.ac.in Pranjal Gupta */
+/* f20171398@hyderabad.bits-pilani.ac.in Ujjwal Raizada */
+/* f20170218@hyderabad.bits-pilani.ac.in Daksh Yashlaha */
+/* f20171454@hyderabad.bits-pilani.ac.in Simran Sandhu */
+/* EndGroupMembers */
+
 import java.io.*;
 import java.net.*;
 import java.util.Base64;
@@ -7,7 +14,7 @@ import java.util.regex.Pattern;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-class ClientRequest {
+class DownloadRequest {
 
     Socket socket;
     String html_path;
@@ -17,7 +24,17 @@ class ClientRequest {
     private String username;
     private String password;
 
-    public ClientRequest(String proxyIP, int port, String hostURL, String user,
+    /**
+     * Constructor for Initialising Class Object
+     * @param proxyIP
+     * @param port
+     * @param hostURL
+     * @param user
+     * @param pass
+     * @param html_path
+     * @param img_path
+     */
+    public DownloadRequest(String proxyIP, int port, String hostURL, String user,
                          String pass, String html_path, String img_path){
         proxyPort = port;
         proxyUrl = proxyIP;
@@ -33,6 +50,9 @@ class ClientRequest {
         extractAndSaveImage(hostURL, htmlCode);
     }
 
+    /**
+     * Creates socket connection between the user and the proxy server
+    */
     void createSocket() {
         try {
             socket = new Socket(proxyUrl, proxyPort);
@@ -45,6 +65,10 @@ class ClientRequest {
         }
     }
 
+    /**
+     * Issues a CONNECT request to the proxy server
+     * @param hostURL
+    */
     public void connectURL(String hostURL){
         try{
             PrintWriter toProxy = new PrintWriter(socket.getOutputStream());
@@ -69,6 +93,14 @@ class ClientRequest {
         }
     }
 
+
+    /**
+     * Makes a GET request through the Proxy-Socket by wrapping it over a SSL
+     * Socket and extracts the HTML (Payload) from the packet(s) received from the
+     * response.
+     * @param hostURL
+     * @return htmlCode (String representation of HTML)
+     */
     public String extractHTML (String hostURL){
         String htmlCode = "";
         try{
@@ -110,6 +142,14 @@ class ClientRequest {
         return htmlCode;
     }
 
+    /**
+     * Extracts image (<img> tag) from the HTML code and downloads the first image
+     * from the HTML code.
+     * To download all the image(s), comment the if-condition following the save_image()
+     * call in the method.
+     * @param hostURL
+     * @param htmlCode
+     */
     public void extractAndSaveImage(String hostURL, String htmlCode){
         Pattern img_tag = Pattern.compile("<img[^>]*src=[\"']([^\"^']*)", Pattern.CASE_INSENSITIVE);
         Matcher matcher = img_tag.matcher(htmlCode);
@@ -120,6 +160,12 @@ class ClientRequest {
         }
     }
 
+    /**
+     * Given the imgURL extracted, this method downloads the image using socket.
+     * @param hostURL
+     * @param imgURL
+     * @return False if any error occurs, else True
+     */
     public boolean save_image(String hostURL, String imgURL){
         if (imgURL.substring(0,5).equals("https") == false) imgURL = "/" + imgURL;
         try{
@@ -173,6 +219,12 @@ class ClientRequest {
         }
     }
 
+    /**
+     * Saves the HTML (payload) received from the response packets
+     * in an html file specified by this.html_path variable.
+     * @param writeString
+     * @throws IOException
+     */
     public void save_html(String writeString) throws IOException{
         FileWriter file = new FileWriter(this.html_path);
         file.write(writeString);
@@ -189,7 +241,7 @@ class HttpProxyDownload{
             System.out.format("Expected 7, found %s args\n", args.length);
             return;
         }
-        ClientRequest client = new ClientRequest(args[1], Integer.parseInt(args[2]),
+        new DownloadRequest(args[1], Integer.parseInt(args[2]),
                                                     args[0], args[3], args[4], args[5], args[6]);
 
 

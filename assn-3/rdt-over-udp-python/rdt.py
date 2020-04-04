@@ -18,8 +18,8 @@ class connectionNotCreatedException(RuntimeError):
 
 class RDT:
     BUFSIZE = 1500
-    WINDOW_SIZE = 10
-    TIMEOUT = 5  # in seconds
+    WINDOW_SIZE = 1000
+    TIMEOUT = 1  # in seconds
 
     def __init__ (self, interface, port):
         self.interface = interface
@@ -53,7 +53,7 @@ class RDT:
                 tn = time.time()
                 if ((tn - self.sent_buffer[i][2]) >= RDT.TIMEOUT):
                     print("retransmitting sq#: ", self.sent_buffer[i][0])
-                    self.__write_socket(self.sent_buffer[i][1], "DATA")
+                    self.__write_socket(self.sent_buffer[i][1], "DATA", retransmit=True)
             self.sent_lock.release()
             print("# packets in buffer: ", len(self.sent_buffer))
 
@@ -107,7 +107,7 @@ class RDT:
                     data_snd["seq_ack"] = data_recv["seq"]
                     
                     rn = random.randint(0, 1000)
-                    if (rn >= 400):  # simulating 40% packet loss
+                    if (rn >= 200):  # simulating 20% packet loss
                         self.__write_socket(data_snd, "ACK")
                     else:
                         print("ACK lost for seq: ", data_recv["seq"])
@@ -134,12 +134,12 @@ class RDT:
             print()
 
 
-    def __write_socket(self, data, data_type):
+    def __write_socket(self, data, data_type, retransmit=False):
         if (self.sock == None):
             raise socketNotCreatedException("Socket not created")
 
         data["type"] = data_type  # setting type of packet in header information
-        if (data_type == "DATA"):
+        if (data_type == "DATA" and retransmit == False):
             self.sent_buffer.append((data["seq"], data, time.time()))
 
         data_send = (json.dumps(data)).encode('utf-8')

@@ -16,7 +16,7 @@ class connectionNotCreatedException(RuntimeError):
 
 
 class RDT:
-    BUFSIZE = 1500
+    BUFSIZE = 1500  # max IP protocol packet size
     WINDOW_SIZE = 10
     TIMEOUT = 1  # in seconds
 
@@ -24,12 +24,12 @@ class RDT:
         self.interface = interface
         self.port = port
         self.sock = self.__create_socket(interface, port)
-        self.recv_buffer = []
-        self.sent_buffer = []
+        self.recv_buffer = []  # buffer to hold received data until application takes it
+        self.sent_buffer = []  # buffer to store sent data until acke'd
         self.seq_num = 0
-        self.seq_map = {}
-        self.connection_status = False
-        self.sent_lock = Lock()
+        self.seq_map = {}  # keeps track of acke'd seq numbers
+        self.connection_status = False  # if user is connected to peer
+        self.sent_lock = Lock()  # thread safety of sent buffer
 
 
     def __create_socket(self, interface, port):
@@ -43,7 +43,7 @@ class RDT:
         print("starting retransmission...")
 
         self.sent_lock.acquire()
-        for i in range(min(5, len(self.sent_buffer))):
+        for i in range(min(5, len(self.sent_buffer))):  # retrasmits maximum of 5 packets
             tn = time.time()
             if ((tn - self.sent_buffer[i][2]) >= 1):
                 print("retransmitting sq#: ", self.sent_buffer[i][0])
@@ -52,7 +52,7 @@ class RDT:
 
 
     def connect(self, interface, port):
-        self.sock.connect((interface, port))
+        self.sock.connect((interface, port))  # store peers connection details
         self.connection_status = True
 
 
@@ -65,8 +65,8 @@ class RDT:
         if (self.connection_status == False):
             raise connectionNotCreatedException("First connect to other peer.")
 
-        Thread(target=self.__start_listening).start()
-        Thread(target=self.__retransmit).start()
+        Thread(target=self.__start_listening).start()  # thread to recv data parallely
+        Thread(target=self.__retransmit).start()  # thread to retransmit unacke'd packets
 
 
     def __start_listening(self):
@@ -81,7 +81,7 @@ class RDT:
             pprint(data_recv)
             data_recv = json.loads(data_recv)
             print("# seq: ", data_recv["seq"])
-            if (data_recv["type"] == "ACK"):
+            if (data_recv["type"] == "ACK"):  # if received packet is ACK
                 print("recv ACK for: ", data_recv["seq_ack"])
 
                 self.sent_lock.acquire()
@@ -91,7 +91,7 @@ class RDT:
                         break
                 self.sent_lock.release()
 
-            else:
+            else:  # if received packet is data packet
                 if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map[data_recv["seq"]] != None):
                     print("sending ACK for: ", data_recv["seq"])
                     data_snd = {}
@@ -120,6 +120,8 @@ class RDT:
         if (self.sock == None):
             raise socketNotCreatedException("Socket not created")
 
+        # TODO: Check packet size with BUFSIZE
+
         data["type"] = data_type  # setting type of packet in header information
         self.sent_buffer.append((data["seq"], data, time.time()))
 
@@ -138,7 +140,7 @@ class RDT:
     def send(self, data):
         seq = self.__next_seq()
 
-        data_snd = {}  # it will store header information
+        data_snd = {}  # it will store header information with data
         data_snd["seq"] = seq
         data_snd["data"] = data
         self.__write_socket(data_snd, "DATA")

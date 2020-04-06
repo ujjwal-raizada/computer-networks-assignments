@@ -6,8 +6,17 @@ from termcolor import colored
 from rdt import RDT
 
 username = input("enter your username: ")
-port1 = int(input("Enter port of this system: "))
-port2 = int(input("Enter port of the other system: "))
+port1 = None
+port2 = None
+if (username == '1'):
+    port1 = 2000
+    port2 = 3000
+elif (username == '2'):
+    port1 = 3000
+    port2 = 2000
+else:
+    port1 = int(input("Enter port of this system: "))
+    port2 = int(input("Enter port of the other system: "))
 
 socket = RDT('localhost', port1)
 socket.connect('localhost', port2)
@@ -16,11 +25,8 @@ socket.listen()
 
 def print_msg():
     while True:
-        time.sleep(0.5)
         data = socket.recv()
-        if (data != None):
-            print("{}: {}".format(colored(data["username"] + ": ", 'blue'), data["message"]))
-            # print("recv buffer size: ", len(socket.recv_buffer))
+        print("{}: {}".format(colored(data["username"] + ": ", 'blue'), data["message"]))
 
 
 Thread(target=print_msg).start()
@@ -36,11 +42,9 @@ while True:
         for i in range(1, 101):
             data["message"] = i
             time.sleep(0.5)
-            while (socket.send(data) == False):
-                time.sleep(0.5)
+            socket.send(data)
             print(colored(username + ": ", 'green'), i)
             # print("recv buffer size: ", len(socket.recv_buffer))
             # print("sent buffer size: ", len(socket.sent_buffer))
     else:
-        while (socket.send(data) == False):
-            time.sleep(0.5)
+        socket.send(data)

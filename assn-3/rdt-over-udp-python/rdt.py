@@ -27,10 +27,11 @@ class connectionNotCreatedException(RuntimeError):
 
 class RDT:
     BUFSIZE = 1500
-    WINDOW_SIZE = 100
-    TIMEOUT = 5  # in seconds
+    WINDOW_SIZE = 10  # size of buffer windows
+    TIMEOUT = 1  # in seconds: starting of retransmission thread
     RATE_TRANSMISSION = 5  # number of packets retransmitted at each event
-    PACKET_LOSS = 1
+    PACKET_LOSS = 2
+    BLOCKING_SLEEP = 0.1
 
     def __init__ (self, interface, port):
         self.interface = interface
@@ -126,6 +127,11 @@ class RDT:
 
 
             else:
+
+                if (data_recv["seq"] >= (self.next_seq_to_app + RDT.WINDOW_SIZE)):
+                    # the recieved data is outside the buffer window size
+                    return
+
                 if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
                     print("sending ACK for: ", data_recv["seq"])
                     data_snd = {}
@@ -181,11 +187,21 @@ class RDT:
         return self.recv_buffer
 
 
-    def recv(self):
-        return self.__read_socket()
+    def recv(self, blocking=True):
+        if (blocking == True):
+            while True:
+                data = self.__read_socket()
+                if (data != None):
+                    data = deepcopy(data)
+                    return data
+                time.sleep(RDT.BLOCKING_SLEEP)
+        else:
+            data = self.__read_socket()
+            data = deepcopy(data)
+            return data
 
 
-    def send(self, data):
+    def __non_blocking_send(self, data):
 
         if (len(self.sent_buffer) > RDT.WINDOW_SIZE):
             print("buffer size full")
@@ -199,3 +215,11 @@ class RDT:
         data_snd["data"] = data
         self.__write_socket(data_snd, "DATA")
         return True
+
+
+    def send(self, data, blocking=True):
+        if (blocking == True):
+            while (self.__non_blocking_send(data) == False):
+                time.sleep(RDT.BLOCKING_SLEEP)
+        else:
+            return self.__non_blocking_send(data)

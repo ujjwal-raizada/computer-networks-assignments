@@ -4,6 +4,14 @@ from pprint import pprint
 from threading import Thread, Lock
 import time
 import random
+import builtins
+
+PRODUCTION = True  # change it false to stop stdout prints from protocol
+
+def print(*args, **kargs):
+    if (PRODUCTION == False):
+        builtins.print(*args, **kargs)
+
 
 
 class socketNotCreatedException(RuntimeError):
@@ -18,8 +26,9 @@ class connectionNotCreatedException(RuntimeError):
 
 class RDT:
     BUFSIZE = 1500
-    WINDOW_SIZE = 1000
-    TIMEOUT = 1  # in seconds
+    WINDOW_SIZE = 100
+    TIMEOUT = 5  # in seconds
+    RATE_TRANSMISSION = 10  # number of packets retransmitted at each event
 
     def __init__ (self, interface, port):
         self.interface = interface
@@ -27,10 +36,19 @@ class RDT:
         self.sock = self.__create_socket(interface, port)
         self.recv_buffer = []
         self.sent_buffer = []
-        self.seq_num = random.randint(0, 1000)
+        self.seq_num = 0
         self.seq_map = {}
         self.connection_status = False
         self.sent_lock = Lock()
+        self.last_seq_to_app = self.seq_num + 1  # last seq number of packet transferred to application
+        self.packet_loss = 8
+
+
+    def packet_loss_rate(self, value):
+        if (10 >= value >= 0):
+            self.packet_loss = value
+        else:
+            raise Exception("Value not in range. (0 - 10)")
 
 
     def __create_socket(self, interface, port):
@@ -49,7 +67,7 @@ class RDT:
 
             self.sent_lock.acquire()
             print("retransmitting thread aquired lock.")
-            for i in range(min(5, len(self.sent_buffer))):
+            for i in range(min(RDT.RATE_TRANSMISSION, len(self.sent_buffer))):
                 tn = time.time()
                 if ((tn - self.sent_buffer[i][2]) >= RDT.TIMEOUT):
                     print("retransmitting sq#: ", self.sent_buffer[i][0])
@@ -85,9 +103,8 @@ class RDT:
             data, address = self.sock.recvfrom(RDT.BUFSIZE)
             data_recv = data.decode('utf-8')
             print('client at {}'.format(address))
-            pprint(data_recv)
             data_recv = json.loads(data_recv)
-            print("# seq: ", data_recv["seq"])
+            # print("# seq: ", data_recv["seq"])
             if (data_recv["type"] == "ACK"):
                 print("recv ACK for: ", data_recv["seq_ack"])
                 print("# packets in buffer: ", len(self.sent_buffer))
@@ -103,17 +120,17 @@ class RDT:
                 if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
                     print("sending ACK for: ", data_recv["seq"])
                     data_snd = {}
-                    data_snd["seq"] = self.__next_seq()
+                    # data_snd["seq"] = self.__next_seq() 
                     data_snd["seq_ack"] = data_recv["seq"]
                     
-                    rn = random.randint(0, 1000)
-                    if (rn >= 200):  # simulating 20% packet loss
+                    rn = random.randint(0, 11)
+                    if (rn >= self.packet_loss):  # simulating 20% packet loss
                         self.__write_socket(data_snd, "ACK")
                     else:
                         print("ACK lost for seq: ", data_recv["seq"])
 
                 if (len(self.recv_buffer) < RDT.WINDOW_SIZE and self.seq_map.get(data_recv["seq"]) == None):
-                    self.recv_buffer.append(data_recv)
+                    self.recv_buffer.append((data_recv["seq"], data_recv))
                     self.seq_map[data_recv["seq"]] = True
 
                 else:
@@ -125,13 +142,14 @@ class RDT:
         if (len(self.recv_buffer) == 0):
             return None
 
-        data = self.recv_buffer.pop()
-        if ("data" in data):
-            return data["data"]  # removing header information before forwarding data to application
+        data = min(self.recv_buffer)
+        if ("data" in data[1] and data[0] == self.last_seq_to_app):
+            print("packet to application: ", self.last_seq_to_app)
+            self.last_seq_to_app += 1
+            self.recv_buffer.remove(data)
+            return data[1]["data"]  # removing header information before forwarding data to application
         else:
-            print("Error in data block")
-            print(data)
-            print()
+            return None
 
 
     def __write_socket(self, data, data_type, retransmit=False):
@@ -159,7 +177,7 @@ class RDT:
         if (len(self.sent_buffer) > RDT.WINDOW_SIZE):
             # TODO: Raise error
             print("buffer size full")
-            return
+            return False
 
         seq = self.__next_seq()
 
@@ -167,5 +185,4 @@ class RDT:
         data_snd["seq"] = seq
         data_snd["data"] = data
         self.__write_socket(data_snd, "DATA")
-
-
+        return True

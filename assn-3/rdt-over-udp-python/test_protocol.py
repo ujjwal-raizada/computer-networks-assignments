@@ -8,10 +8,11 @@ sock = RDT('localhost', port)
 sock.connect('localhost', port2)
 sock.listen()
 d = random.randint(0, 1000)
+time.sleep(7)
 while True:
     
-    time.sleep(7)
+    time.sleep(1)
     sock.send(d)
-    time.sleep(3)
     print("Recieved: ", sock.recv())
+    print("buffer size: ", len(sock.sent_buffer))
     d += 1

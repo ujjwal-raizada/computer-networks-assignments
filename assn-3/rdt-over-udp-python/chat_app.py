@@ -38,6 +38,7 @@ while True:
             time.sleep(0.5)
             while (socket.send(data) == False):
                 time.sleep(0.5)
+            print(colored(username + ": ", 'green'), i)
             # print("recv buffer size: ", len(socket.recv_buffer))
             # print("sent buffer size: ", len(socket.sent_buffer))
     else:

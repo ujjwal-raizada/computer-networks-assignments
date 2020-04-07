@@ -39,9 +39,9 @@ while True:
     print(colored(username + ": ", 'green'), msg)
 
     if (msg == "start test"):
-        for i in range(1, 101):
+        for i in range(1, 10001):
             data["message"] = i
-            time.sleep(0.5)
+            # time.sleep(0.5)
             socket.send(data)
             print(colored(username + ": ", 'green'), i)
             # print("recv buffer size: ", len(socket.recv_buffer))

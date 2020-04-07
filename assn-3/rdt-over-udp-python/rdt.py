@@ -7,7 +7,7 @@ import random
 import builtins
 from copy import deepcopy
 
-PRODUCTION = False  # change it to false to stop stdout prints from protocol
+PRODUCTION = True  # change it to false to stop stdout prints from protocol
 
 def print(*args, **kargs):
     if (PRODUCTION == False):
@@ -28,10 +28,10 @@ class connectionNotCreatedException(RuntimeError):
 class RDT:
     BUFSIZE = 1500
     PACKET_SIZE = 1000  # in bytes
-    WINDOW_SIZE = 10  # size of buffer windows
+    WINDOW_SIZE = 1000  # size of buffer windows
     TIMEOUT = 1  # in seconds: starting of retransmission thread
-    RATE_TRANSMISSION = 5  # number of packets retransmitted at each event
-    PACKET_LOSS = 2  # in range(0, 11), 0 for no loss
+    RATE_TRANSMISSION = 50  # number of packets retransmitted at each event
+    PACKET_LOSS = 1  # in range(0, 11), 0 for no loss
     BLOCKING_SLEEP = 0.1
 
     def __init__ (self, interface, port):
@@ -129,9 +129,9 @@ class RDT:
 
             else:
 
-                if (data_recv["seq"] >= (self.next_seq_to_app + RDT.WINDOW_SIZE)):
-                    # the recieved data is outside the buffer window size
-                    return
+                if (data_recv["seq"] >= (self.next_seq_to_app + (RDT.WINDOW_SIZE - RDT.WINDOW_SIZE / 10))):
+                    # the recieved data is outside 90% of the buffer window size
+                    continue
 
                 # if (hash(json.dumps(data_recv["data"])) != data_recv["hash"]):
                 #     # check if any inconsistant data has arrived
@@ -173,7 +173,8 @@ class RDT:
     def __write_socket(self, data, data_type, retransmit=False):
         if (self.sock == None):
             raise socketNotCreatedException("Socket not created")
-
+        
+        data = deepcopy(data)
         data["type"] = data_type  # setting type of packet in header information
         if (data_type == "DATA" and retransmit == False):
 

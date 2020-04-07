@@ -8,7 +8,7 @@ def server():
     socket.connect('localhost', port2)
     socket.listen()
 
-    filename = 'test_image.jpeg'
+    filename = 'file_test.txt'
     f = open(filename, 'rb')
     l = f.read(100)
     while(l):
@@ -30,7 +30,7 @@ def client():
     socket.connect('localhost', port1)
     socket.listen()
 
-    with open('recieved_file.jpeg', 'wb') as f:
+    with open('recieved_file.txt', 'wb') as f:
         while True:
             data = socket.recv()
             data = data.encode()

@@ -7,7 +7,7 @@ import random
 import builtins
 from copy import deepcopy
 
-PRODUCTION = True  # change it false to stop stdout prints from protocol
+PRODUCTION = False  # change it to false to stop stdout prints from protocol
 
 def print(*args, **kargs):
     if (PRODUCTION == False):
@@ -27,10 +27,11 @@ class connectionNotCreatedException(RuntimeError):
 
 class RDT:
     BUFSIZE = 1500
+    PACKET_SIZE = 1000  # in bytes
     WINDOW_SIZE = 10  # size of buffer windows
     TIMEOUT = 1  # in seconds: starting of retransmission thread
     RATE_TRANSMISSION = 5  # number of packets retransmitted at each event
-    PACKET_LOSS = 2
+    PACKET_LOSS = 2  # in range(0, 11), 0 for no loss
     BLOCKING_SLEEP = 0.1
 
     def __init__ (self, interface, port):
@@ -132,6 +133,12 @@ class RDT:
                     # the recieved data is outside the buffer window size
                     return
 
+                # if (hash(json.dumps(data_recv["data"])) != data_recv["hash"]):
+                #     # check if any inconsistant data has arrived
+                #     print(json.dumps(data_recv["data"]))
+                #     print(hash(json.dumps(data_recv["data"])), " ", data_recv["hash"])
+                #     return
+
                 if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
                     print("sending ACK for: ", data_recv["seq"])
                     data_snd = {}
@@ -144,7 +151,7 @@ class RDT:
                     self.seq_map[data_recv["seq"]] = True
 
                 else:
-                    print("buffer full, data rejected or data already recieved")
+                    print("data rejected: data already recieved or buffer full")
 
 
     def __read_socket(self):
@@ -174,6 +181,8 @@ class RDT:
                 self.sent_buffer.append((data["seq"], data, time.time()))
 
         data_send = (json.dumps(data)).encode('utf-8')
+        if (len(data_send) > RDT.PACKET_SIZE):
+            raise Exception('Packet size greater the allowed size.')
 
         rn = random.randint(0, 11)
         if (rn >= RDT.PACKET_LOSS):  # simulating ACK packet loss
@@ -213,6 +222,9 @@ class RDT:
         data_snd = {}  # it will store header information
         data_snd["seq"] = seq
         data_snd["data"] = data
+        # TODO: Add hash check functionality
+        # data_snd["hash"] = hash(json.dumps(data))
+        # print(json.dumps(data))
         self.__write_socket(data_snd, "DATA")
         return True
 

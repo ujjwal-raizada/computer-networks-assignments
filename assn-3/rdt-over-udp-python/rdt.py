@@ -28,11 +28,11 @@ class connectionNotCreatedException(RuntimeError):
 class RDT:
     BUFSIZE = 1500
     PACKET_SIZE = 1000  # in bytes
-    WINDOW_SIZE = 1000  # size of buffer windows
+    WINDOW_SIZE = 10000  # size of buffer windows
     TIMEOUT = 1  # in seconds: starting of retransmission thread
-    RATE_TRANSMISSION = 50  # number of packets retransmitted at each event
-    PACKET_LOSS = 1  # in range(0, 11), 0 for no loss
-    BLOCKING_SLEEP = 0.1
+    PACKET_LOSS = 0  # in range(0, 11), 0 for no loss
+    BLOCKING_SLEEP = 0.00001
+
 
     def __init__ (self, interface, port):
         self.interface = interface
@@ -68,17 +68,15 @@ class RDT:
 
         while True:
             time.sleep(2 * RDT.TIMEOUT)
-            print()
-            print("starting retransmission...")
-            print()
-
             with self.sent_lock:
-                print("retransmitting thread aquired lock.")
-                for i in range(min(RDT.RATE_TRANSMISSION, len(self.sent_buffer))):
-                    tn = time.time()
-                    if ((tn - self.sent_buffer[i][2]) >= RDT.TIMEOUT):
-                        print("retransmitting sq#: ", self.sent_buffer[i][0])
-                        self.__write_socket(self.sent_buffer[i][1], "DATA", retransmit=True)
+                print("Retransmitting thread aquired the lock...")
+                for packet in self.sent_buffer:
+                    time_now = time.time()
+                    if ((time_now - packet[2]) >= RDT.TIMEOUT):
+                        print("Retransmitting: ", packet[0])
+                        self.__write_socket(packet[1], "DATA", retransmit=True)
+                    else:
+                        break  # rest of the packets in the queue are yet to timeout
             print("# packets in buffer: ", len(self.sent_buffer))
 
 
@@ -105,6 +103,9 @@ class RDT:
         if (self.sock == None):
             raise socketNotCreatedException("Socket not created")
 
+        ack_counter = 0  # counts number of acke'd packets still in sent list
+        ack_map = set()
+
         print("listening for datagrams at {}:".format(self.sock.getsockname()))
         while True:
             with self.sock_recv_lock:
@@ -114,17 +115,22 @@ class RDT:
             print('client at {}'.format(address))
             data_recv = json.loads(data_recv)
             print(data_recv)
-            # print("# seq: ", data_recv["seq"])
+
             if (data_recv["type"] == "ACK"):
                 print("recv ACK for: ", data_recv["seq_ack"])
                 print("# packets in buffer: ", len(self.sent_buffer))
-
-                with self.sent_lock:
-                    print("listening thread aquired lock.")
-                    for packet in self.sent_buffer:
-                        if packet[0] == data_recv["seq_ack"]:
-                            self.sent_buffer.remove(packet)
-                            break
+                ack_counter += 1
+                ack_map.add(data_recv["seq_ack"])
+                if (ack_counter >= (RDT.WINDOW_SIZE / 10)):
+                    ack_counter = 0
+                    temp_sent_buffer = []
+                    with self.sent_lock:
+                        print("listening thread aquired lock.")
+                        for packet in self.sent_buffer:
+                            if packet[0] not in ack_map:
+                                temp_sent_buffer.append(packet)
+                        self.sent_buffer = temp_sent_buffer
+                        ack_map = set()
 
 
             else:
@@ -236,3 +242,11 @@ class RDT:
                 time.sleep(RDT.BLOCKING_SLEEP)
         else:
             return self.__non_blocking_send(data)
+
+
+    def print_config():
+        print("BUFSIZE (bytes recv function accepts): ", RDT.BUFSIZE)
+        print("WINDOW_SIZE (number of packets in send or recv buffer): ", RDT.WINDOW_SIZE)
+        print("PACKET_SIZE (Max size of send packet in bytes): ", RDT.PACKET_SIZE)
+        print("TIMEOUT (time in seconds to retransmit packet): ", RDT.TIMEOUT)
+        print("BLOCKING_SLEEP (time in seconds to recheck buffer): ", RDT.BLOCKING_SLEEP)

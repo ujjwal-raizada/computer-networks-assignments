@@ -9,11 +9,21 @@ def sender():
     conn.connect('localhost', 2000)
     conn.listen()
     data_size = 0
+
+    start_time = time.time()
+
     while True:
         conn.send(data)
         data_size += len(data)
         print("sent: ", data_size, " Bytes", end="\r")
         print("sent: {} Bytes - buffer: ({})".format(data_size, len(conn.sent_buffer)), end="\r")
+
+        if ((time.time() - start_time) >= 60):
+            print("\ntest finished")
+            message = "end"
+            conn.send(message)
+            conn.close()
+            break
 
 
 def receiver():
@@ -26,6 +36,10 @@ def receiver():
     bandwidth = 0
     while True:
         data = conn.recv()
+        if (data == "end"):
+            print("\ntest finished")
+            conn.close()
+            break
         data_size += len(data)
 
         bandwidth = data_size / (time.time() - time_start)

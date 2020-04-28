@@ -1,11 +1,14 @@
 import socket
-import json
+import pickle
 from pprint import pprint
 from threading import Thread, Lock
 import time
 import random
 import builtins
+import hashlib
 from copy import deepcopy
+from collections.abc import Hashable
+
 
 PRODUCTION = True  # change it to false to stop stdout prints from protocol
 
@@ -27,8 +30,8 @@ class connectionNotCreatedException(RuntimeError):
 
 class RDT:
     BUFSIZE = 1500
-    PACKET_SIZE = 1000  # in bytes
-    WINDOW_SIZE = 10000  # size of buffer windows
+    PACKET_SIZE = 1400  # in bytes
+    WINDOW_SIZE = 1000  # size of buffer windows
     TIMEOUT = 1  # in seconds: starting of retransmission thread
     PACKET_LOSS = 0  # in range(0, 11), 0 for no loss
     BLOCKING_SLEEP = 0.00001
@@ -42,6 +45,7 @@ class RDT:
         self.sent_buffer = []
         self.seq_num = 0
         self.seq_map = {}
+        self.conn_close_time = 0
         self.connection_status = False
         self.sent_lock = Lock()
         self.sock_recv_lock = Lock()
@@ -67,7 +71,11 @@ class RDT:
     def __retransmit(self):
 
         while True:
-            time.sleep(2 * RDT.TIMEOUT)
+            time.sleep(RDT.TIMEOUT)
+
+            if (self.connection_status == False and len(self.sent_buffer) == 0):
+                return
+
             with self.sent_lock:
                 print("Retransmitting thread aquired the lock...")
                 for packet in self.sent_buffer:
@@ -84,6 +92,10 @@ class RDT:
         self.sock.connect((interface, port))
         self.connection_status = True
 
+    def close(self):
+        self.connection_status = False
+        self.conn_close_time = time.time()
+
 
     def __next_seq(self):
         with self.seq_lock:
@@ -95,8 +107,11 @@ class RDT:
         if (self.connection_status == False):
             raise connectionNotCreatedException("First connect to other peer.")
 
-        Thread(target=self.__start_listening).start()
-        Thread(target=self.__retransmit).start()
+        listening_thread = Thread(target=self.__start_listening)
+        restransmission_thread = Thread(target=self.__retransmit)
+
+        listening_thread.start()
+        restransmission_thread.start()
 
 
     def __start_listening(self):
@@ -108,12 +123,19 @@ class RDT:
 
         print("listening for datagrams at {}:".format(self.sock.getsockname()))
         while True:
-            with self.sock_recv_lock:
-                data, address = self.sock.recvfrom(RDT.BUFSIZE)
 
-            data_recv = data.decode('utf-8')
+            if (self.connection_status == False and len(self.sent_buffer) == 0):
+                return
+            try:
+                with self.sock_recv_lock:
+                    data, address = self.sock.recvfrom(RDT.BUFSIZE)
+            except Exception as e:
+                self.sock_recv_lock.release()
+                return
+
+            data_recv = data
             print('client at {}'.format(address))
-            data_recv = json.loads(data_recv)
+            data_recv = pickle.loads(data_recv)
             print(data_recv)
 
             if (data_recv["type"] == "ACK"):
@@ -121,7 +143,7 @@ class RDT:
                 print("# packets in buffer: ", len(self.sent_buffer))
                 ack_counter += 1
                 ack_map.add(data_recv["seq_ack"])
-                if (ack_counter >= (RDT.WINDOW_SIZE / 10)):
+                if (ack_counter >= (RDT.WINDOW_SIZE / 10) or ((time.time() - self.conn_close_time) >= 5 * RDT.TIMEOUT) and self.connection_status == False):
                     ack_counter = 0
                     temp_sent_buffer = []
                     with self.sent_lock:
@@ -135,15 +157,15 @@ class RDT:
 
             else:
 
-                if (data_recv["seq"] >= (self.next_seq_to_app + (RDT.WINDOW_SIZE - RDT.WINDOW_SIZE / 10))):
+                if (data_recv["seq"] >= (self.next_seq_to_app + (RDT.WINDOW_SIZE - (RDT.WINDOW_SIZE / 10)))):
                     # the recieved data is outside 90% of the buffer window size
                     continue
 
-                # if (hash(json.dumps(data_recv["data"])) != data_recv["hash"]):
-                #     # check if any inconsistant data has arrived
-                #     print(json.dumps(data_recv["data"]))
-                #     print(hash(json.dumps(data_recv["data"])), " ", data_recv["hash"])
-                #     return
+                data = data_recv["data"]
+                if (hashlib.md5(pickle.dumps(data)).hexdigest() != data_recv["hash"]):
+                    # check if any inconsistant data has arrived
+                    print("inconsistent data received")
+                    continue
 
                 if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
                     print("sending ACK for: ", data_recv["seq"])
@@ -187,14 +209,18 @@ class RDT:
             with self.sent_lock:
                 self.sent_buffer.append((data["seq"], data, time.time()))
 
-        data_send = (json.dumps(data)).encode('utf-8')
+        data_send = (pickle.dumps(data))
         if (len(data_send) > RDT.PACKET_SIZE):
             raise Exception('Packet size greater the allowed size.')
 
         rn = random.randint(0, 11)
         if (rn >= RDT.PACKET_LOSS):  # simulating ACK packet loss
-            with self.sock_send_lock:
-                self.sock.send(data_send)
+            try:
+                with self.sock_send_lock:
+                    self.sock.send(data_send)
+            except Exception as e:
+                self.sock_send_lock.release()
+                return
         else:
             print("packet lost")
 
@@ -230,13 +256,16 @@ class RDT:
         data_snd["seq"] = seq
         data_snd["data"] = data
         # TODO: Add hash check functionality
-        # data_snd["hash"] = hash(json.dumps(data))
-        # print(json.dumps(data))
+        data_snd["hash"] = hashlib.md5(pickle.dumps(data)).hexdigest()
         self.__write_socket(data_snd, "DATA")
         return True
 
 
     def send(self, data, blocking=True):
+
+        if (not isinstance(data, Hashable)):
+            raise Exception("Data object is not hashable.")
+
         if (blocking == True):
             while (self.__non_blocking_send(data) == False):
                 time.sleep(RDT.BLOCKING_SLEEP)

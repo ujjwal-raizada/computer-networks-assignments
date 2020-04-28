@@ -124,13 +124,10 @@ class RDT:
         print("listening for datagrams at {}:".format(self.sock.getsockname()))
         while True:
 
-            if (self.connection_status == False and len(self.sent_buffer) == 0):
-                return
             try:
                 with self.sock_recv_lock:
                     data, address = self.sock.recvfrom(RDT.BUFSIZE)
-            except Exception as e:
-                self.sock_recv_lock.release()
+            except Exception as _:
                 return
 
             data_recv = data
@@ -143,7 +140,9 @@ class RDT:
                 print("# packets in buffer: ", len(self.sent_buffer))
                 ack_counter += 1
                 ack_map.add(data_recv["seq_ack"])
-                if (ack_counter >= (RDT.WINDOW_SIZE / 10) or ((time.time() - self.conn_close_time) >= 5 * RDT.TIMEOUT) and self.connection_status == False):
+                if (ack_counter >= (RDT.WINDOW_SIZE / 10) or 
+                    (((time.time() - self.conn_close_time) >= 5 * RDT.TIMEOUT) and self.connection_status == False)):
+
                     ack_counter = 0
                     temp_sent_buffer = []
                     with self.sent_lock:
@@ -217,9 +216,8 @@ class RDT:
         if (rn >= RDT.PACKET_LOSS):  # simulating ACK packet loss
             try:
                 with self.sock_send_lock:
-                    self.sock.send(data_send)
-            except Exception as e:
-                self.sock_send_lock.release()
+                    self.sock.sendall(data_send)
+            except Exception as _:
                 return
         else:
             print("packet lost")

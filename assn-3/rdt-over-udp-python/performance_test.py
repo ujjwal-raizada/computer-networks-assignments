@@ -22,7 +22,6 @@ def sender():
             print("\ntest finished")
             message = "end"
             conn.send(message)
-            conn.close()
             break
 
 
@@ -38,7 +37,6 @@ def receiver():
         data = conn.recv()
         if (data == "end"):
             print("\ntest finished")
-            conn.close()
             break
         data_size += len(data)
 

@@ -1,4 +1,4 @@
-from rdt import RDT
+from fssp_protocol import FSSP
 import time
 import os
 from tqdm import tqdm
@@ -24,7 +24,7 @@ def get_files(filename):
 
 
 def server():
-    socket = RDT('localhost', port1)
+    socket = FSSP('localhost', port1)
     socket.connect('localhost', port2)
     socket.listen()
     while True:
@@ -66,7 +66,7 @@ def server():
 
 
 def client():
-    socket = RDT('localhost', port2)
+    socket = FSSP('localhost', port2)
     socket.connect('localhost', port1)
     socket.listen()
     time.sleep(5)

@@ -1,11 +1,11 @@
 import time
 
-from rdt import RDT
+from fssp_protocol import FSSP
 
 def sender():
 
-    data = "Sample data to be sent over by the RDT protocol" * 20  # 470 bytes
-    conn = RDT('localhost', 3000)
+    data = "Sample data to be sent over by the FSSP protocol" * 20  # 470 bytes
+    conn = FSSP('localhost', 3000)
     conn.connect('localhost', 2000)
     conn.listen()
     data_size = 0
@@ -27,7 +27,7 @@ def sender():
 
 def receiver():
 
-    conn = RDT('localhost', 2000)
+    conn = FSSP('localhost', 2000)
     conn.connect('localhost', 3000)
     conn.listen()
     time_start = time.time()

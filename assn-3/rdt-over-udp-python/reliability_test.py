@@ -1,10 +1,10 @@
 import time
 
-from rdt import RDT
+from fssp_protocol import FSSP
 
 def sender():
 
-    conn = RDT('localhost', 2000)
+    conn = FSSP('localhost', 2000)
     conn.connect('localhost', 3000)
     conn.listen()
     time.sleep(5)
@@ -23,7 +23,7 @@ def sender():
 
 def receiver():
 
-    conn = RDT('localhost', 3000)
+    conn = FSSP('localhost', 3000)
     conn.connect('localhost', 2000)
     conn.listen()
     test_val = 1

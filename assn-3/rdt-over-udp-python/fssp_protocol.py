@@ -28,7 +28,9 @@ class connectionNotCreatedException(RuntimeError):
         self.args = args
 
 
-class RDT:
+class FSSP:
+    """ Fail-Safe and Simple (FSSP) Protocol """
+
     BUFSIZE = 1500
     PACKET_SIZE = 1400  # in bytes
     WINDOW_SIZE = 1000  # size of buffer windows
@@ -57,7 +59,7 @@ class RDT:
 
     def packet_loss_rate(self, value):
         if (10 >= value >= 0):
-            RDT.PACKET_LOSS = value
+            FSSP.PACKET_LOSS = value
         else:
             raise Exception("Value not in range. (0 - 10)")
 
@@ -71,7 +73,7 @@ class RDT:
     def __retransmit(self):
 
         while True:
-            time.sleep(RDT.TIMEOUT)
+            time.sleep(FSSP.TIMEOUT)
 
             if (self.connection_status == False and len(self.sent_buffer) == 0):
                 return
@@ -80,7 +82,7 @@ class RDT:
                 print("Retransmitting thread aquired the lock...")
                 for packet in self.sent_buffer:
                     time_now = time.time()
-                    if ((time_now - packet[2]) >= RDT.TIMEOUT):
+                    if ((time_now - packet[2]) >= FSSP.TIMEOUT):
                         print("Retransmitting: ", packet[0])
                         self.__write_socket(packet[1], "DATA", retransmit=True)
                     else:
@@ -126,7 +128,7 @@ class RDT:
 
             try:
                 with self.sock_recv_lock:
-                    data, address = self.sock.recvfrom(RDT.BUFSIZE)
+                    data, address = self.sock.recvfrom(FSSP.BUFSIZE)
             except Exception as _:
                 return
 
@@ -140,8 +142,8 @@ class RDT:
                 print("# packets in buffer: ", len(self.sent_buffer))
                 ack_counter += 1
                 ack_map.add(data_recv["seq_ack"])
-                if (ack_counter >= (RDT.WINDOW_SIZE / 10) or 
-                    (((time.time() - self.conn_close_time) >= 5 * RDT.TIMEOUT) and self.connection_status == False)):
+                if (ack_counter >= (FSSP.WINDOW_SIZE / 10) or 
+                    (((time.time() - self.conn_close_time) >= 5 * FSSP.TIMEOUT) and self.connection_status == False)):
 
                     ack_counter = 0
                     temp_sent_buffer = []
@@ -156,7 +158,7 @@ class RDT:
 
             else:
 
-                if (data_recv["seq"] >= (self.next_seq_to_app + (RDT.WINDOW_SIZE - (RDT.WINDOW_SIZE / 10)))):
+                if (data_recv["seq"] >= (self.next_seq_to_app + (FSSP.WINDOW_SIZE - (FSSP.WINDOW_SIZE / 10)))):
                     # the recieved data is outside 90% of the buffer window size
                     continue
 
@@ -166,14 +168,14 @@ class RDT:
                     print("inconsistent data received")
                     continue
 
-                if ((len(self.recv_buffer) < RDT.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
+                if ((len(self.recv_buffer) < FSSP.WINDOW_SIZE) or self.seq_map.get(data_recv["seq"]) != None):
                     print("sending ACK for: ", data_recv["seq"])
                     data_snd = {}
                     data_snd["seq_ack"] = data_recv["seq"]
                     
                     self.__write_socket(data_snd, "ACK")
 
-                if (len(self.recv_buffer) < RDT.WINDOW_SIZE and self.seq_map.get(data_recv["seq"]) == None):
+                if (len(self.recv_buffer) < FSSP.WINDOW_SIZE and self.seq_map.get(data_recv["seq"]) == None):
                     self.recv_buffer.append((data_recv["seq"], data_recv))
                     self.seq_map[data_recv["seq"]] = True
 
@@ -209,11 +211,11 @@ class RDT:
                 self.sent_buffer.append((data["seq"], data, time.time()))
 
         data_send = (pickle.dumps(data))
-        if (len(data_send) > RDT.PACKET_SIZE):
+        if (len(data_send) > FSSP.PACKET_SIZE):
             raise Exception('Packet size greater the allowed size.')
 
         rn = random.randint(0, 11)
-        if (rn >= RDT.PACKET_LOSS):  # simulating ACK packet loss
+        if (rn >= FSSP.PACKET_LOSS):  # simulating ACK packet loss
             try:
                 with self.sock_send_lock:
                     self.sock.sendall(data_send)
@@ -234,7 +236,7 @@ class RDT:
                 if (data != None):
                     data = deepcopy(data)
                     return data
-                time.sleep(RDT.BLOCKING_SLEEP)
+                time.sleep(FSSP.BLOCKING_SLEEP)
         else:
             data = self.__read_socket()
             data = deepcopy(data)
@@ -243,7 +245,7 @@ class RDT:
 
     def __non_blocking_send(self, data):
 
-        if (len(self.sent_buffer) > RDT.WINDOW_SIZE):
+        if (len(self.sent_buffer) > FSSP.WINDOW_SIZE):
             print("buffer size full")
             return False
         
@@ -266,15 +268,15 @@ class RDT:
 
         if (blocking == True):
             while (self.__non_blocking_send(data) == False):
-                time.sleep(RDT.BLOCKING_SLEEP)
+                time.sleep(FSSP.BLOCKING_SLEEP)
         else:
             return self.__non_blocking_send(data)
 
 
     @staticmethod
     def print_config():
-        print("BUFSIZE (bytes recv function accepts): ", RDT.BUFSIZE)
-        print("WINDOW_SIZE (number of packets in send or recv buffer): ", RDT.WINDOW_SIZE)
-        print("PACKET_SIZE (Max size of send packet in bytes): ", RDT.PACKET_SIZE)
-        print("TIMEOUT (time in seconds to retransmit packet): ", RDT.TIMEOUT)
-        print("BLOCKING_SLEEP (time in seconds to recheck buffer): ", RDT.BLOCKING_SLEEP)
+        print("BUFSIZE (bytes recv function accepts): ", FSSP.BUFSIZE)
+        print("WINDOW_SIZE (number of packets in send or recv buffer): ", FSSP.WINDOW_SIZE)
+        print("PACKET_SIZE (Max size of send packet in bytes): ", FSSP.PACKET_SIZE)
+        print("TIMEOUT (time in seconds to retransmit packet): ", FSSP.TIMEOUT)
+        print("BLOCKING_SLEEP (time in seconds to recheck buffer): ", FSSP.BLOCKING_SLEEP)

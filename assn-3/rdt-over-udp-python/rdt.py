@@ -271,6 +271,7 @@ class RDT:
             return self.__non_blocking_send(data)
 
 
+    @staticmethod
     def print_config():
         print("BUFSIZE (bytes recv function accepts): ", RDT.BUFSIZE)
         print("WINDOW_SIZE (number of packets in send or recv buffer): ", RDT.WINDOW_SIZE)

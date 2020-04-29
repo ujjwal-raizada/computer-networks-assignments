@@ -9,44 +9,60 @@ port2 = 3000
 
 BUFFERSIZE = 512
 
+def get_files(filename):
+    file_list = []
+    if (os.path.isfile("storage/" + filename)):
+        return [filename]
+    elif (os.path.isdir("storage/" + filename)):
+        for file in os.listdir("storage/" + filename):
+            if (os.path.isfile("storage/" + file)):
+                file_list.append(file)
+        return file_list
+    else:
+        print("file / folder not found")
+        return []
+
+
 def server():
     socket = RDT('localhost', port1)
     socket.connect('localhost', port2)
     socket.listen()
+    while True:
+        filename = input("\nfile or folder name (in storage folder): ")
+        if (filename == "-"):
+            filename = "assignment-3.pdf"
 
-    filename = input("filename (in storage folder): ")
-    if (filename == ""):
-        filename = "assignment-3.pdf"
 
+        time.sleep(5)
+        file_list = get_files(filename)
+        print(f"sending {len(file_list)} files to client.")
 
-    time.sleep(5)
+        for file in file_list:
+            file_path = "storage/" + file
+            f = open(file_path, 'rb')
+            filesize = os.path.getsize(file_path)
+            print(f"sending {file} to client")
 
-    f = open("storage/" + filename, 'rb')
-    filesize = os.path.getsize("storage/" + filename)
-    print(f"sending {filename} to client")
-
-    data = (filename, filesize)  # protocol can send any python hashable object
-    socket.send(data)
-    print(f"filesize: {filesize}")
-
-    data_sent = 0
-    with tqdm(total=filesize) as pbar:
-        data = f.read(BUFFERSIZE)
-        while(data):
+            data = (file, filesize)  # protocol can send any python hashable object
             socket.send(data)
-            # print(f"sent: {data_sent} / {filesize}", end="\r")
-            update_value = min(BUFFERSIZE, filesize - data_sent)
-            data_sent += BUFFERSIZE
-            pbar.update(update_value)
+            print(f"filesize: {filesize}")
 
-            data = f.read(BUFFERSIZE)
+            data_sent = 0
+            with tqdm(total=filesize) as pbar:
+                data = f.read(BUFFERSIZE)
+                while(data):
+                    socket.send(data)
+                    # print(f"sent: {data_sent} / {filesize}", end="\r")
+                    update_value = min(BUFFERSIZE, filesize - data_sent)
+                    data_sent += BUFFERSIZE
+                    pbar.update(update_value)
 
-    f.close()
+                    data = f.read(BUFFERSIZE)
 
-    print('\ndone sending')
-    f.close()
-    socket.close()
-    sys.exit()
+            f.close()
+
+            print('\ndone sending')
+
 
 
 def client():
@@ -55,26 +71,27 @@ def client():
     socket.listen()
     time.sleep(5)
 
-    filename, filesize = socket.recv()
-    print(f"filename: {filename}, filesize: {filesize}")
+    while True:
+        print("\nwaiting for another file...")
+        filename, filesize = socket.recv()
+        print(f"filename: {filename}, filesize: {filesize}")
 
-    data_recv = 0
+        data_recv = 0
 
-    with open('storage/received_files/' + filename, 'wb+') as f:
-        with tqdm(total=filesize) as pbar:
-            while True:
-                data = socket.recv()
-                data_recv += len(data)
-                f.write(data)
-                # print(f"received: {data_recv} / {filesize}", end="\r")
-                pbar.update(len(data))
-                if (data_recv >= filesize):
-                    break
-            
-            
-    print("\ntransfer complete")
-    socket.close()
-    sys.exit()
+        with open('storage/received_files/' + filename, 'wb+') as f:
+            with tqdm(total=filesize) as pbar:
+                while True:
+                    data = socket.recv()
+                    data_recv += len(data)
+                    f.write(data)
+                    # print(f"received: {data_recv} / {filesize}", end="\r")
+                    pbar.update(len(data))
+                    if (data_recv >= filesize):
+                        break
+                
+                
+        print("\ntransfer complete")
+
 
 
 t = input("type (server or client): ")

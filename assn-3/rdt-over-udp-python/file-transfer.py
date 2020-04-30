@@ -29,7 +29,7 @@ def server():
     socket.listen()
     while True:
         filename = input("\nfile or folder name (in storage folder): ")
-        if (filename == "-"):
+        if (filename == ""):
             filename = "assignment-3.pdf"
 
 
